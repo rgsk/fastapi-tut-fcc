@@ -5,7 +5,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import time
 app = FastAPI()
-my_posts = []
 
 
 class Post(BaseModel):
@@ -60,31 +59,20 @@ def create_post(post: Post):
     }
 
 
-def find_post(id: int):
-    for post in my_posts:
-        if post['id'] == id:
-            return post
-
-
-def find_post_index(id: int):
-    for i, p in enumerate(my_posts):
-        if p['id'] == id:
-            return i
-    return -1
-
-
 @app.get('/posts/latest')
 def get_latest():
 
-    post = my_posts[-1] if my_posts else None
+    cursor.execute('''SELECT * FROM posts ORDER BY created_at DESC LIMIT 1''')
+    latest_post = cursor.fetchone()
     return {
-        'data': post
+        'data': latest_post
     }
 
 
 @app.get('/posts/{id}')
-def get_post(id: int, response: Response):
-    post = find_post(id)
+def get_post(id: int):
+    cursor.execute('''SELECT * FROM posts WHERE id = %s''', (str(id)))
+    post = cursor.fetchone()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f'post with id: {id} not found')
@@ -96,23 +84,30 @@ def get_post(id: int, response: Response):
 
 @app.put('/posts/{id}')
 def update_post(id: int, post: Post):
-    idx = find_post_index(id)
-    if idx == -1:
+    cursor.execute("""
+        UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s
+        RETURNING *
+    """, (post.title, post.content, post.published, str(id))
+    )
+    updated_post = cursor.fetchone()
+    conn.commit()
+    if not updated_post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f'post with id: {id} not found')
-    post_dict = post.dict()
-    post_dict['id'] = id
-    my_posts[idx] = post_dict
+
     return {
-        'data': post_dict
+        'data': updated_post
     }
 
 
 @app.delete('/posts/{id}', status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id: int):
-    idx = find_post_index(id)
-    if idx == -1:
+    cursor.execute(
+        '''DELETE FROM posts WHERE id = %s returning  *''', (str(id))
+    )
+    deleted_post = cursor.fetchone()
+    conn.commit()
+    if not deleted_post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f'post with id: {id} not found')
-    my_posts.pop(idx)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
