@@ -12,7 +12,6 @@ class Post(BaseModel):
     title: str
     content: str
     published: bool = True
-    rating: Optional[int] = None
 
 
 while True:
@@ -39,18 +38,25 @@ async def root():
 
 @app.get('/posts')
 def get_posts():
+    cursor.execute('''
+        SELECT * FROM posts
+    ''')
+    posts = cursor.fetchall()
     return {
-        'data': my_posts
+        'data': posts
     }
 
 
 @app.post('/posts', status_code=status.HTTP_201_CREATED)
 def create_post(post: Post):
-    saved_post = post.dict()
-    saved_post['id'] = len(my_posts) + 1
-    my_posts.append(saved_post)
+    cursor.execute('''
+        INSERT INTO posts (title, content, published) VALUES (%s, %s, %s)
+        RETURNING *
+    ''', (post.title, post.content, post.published))
+    new_post = cursor.fetchone()
+    conn.commit()
     return {
-        'data': saved_post
+        'data': new_post
     }
 
 
