@@ -1,6 +1,9 @@
 from typing import Optional
 from fastapi import FastAPI, Body, Response, status, HTTPException
 from pydantic import BaseModel
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import time
 app = FastAPI()
 my_posts = []
 
@@ -10,6 +13,21 @@ class Post(BaseModel):
     content: str
     published: bool = True
     rating: Optional[int] = None
+
+
+while True:
+    try:
+        conn = psycopg2.connect(
+            host='localhost', database='fastapi', user='postgres', password='password', cursor_factory=RealDictCursor)
+        # without cursor_factory we will only get values
+        # so we add cursor_factory to return column names too
+        cursor = conn.cursor()
+        print('Database connection successfull')
+        break
+    except Exception as error:
+        print('Connecting to Database failed')
+        print('Error: ', error)
+        time.sleep(2)
 
 
 @app.get('/')
